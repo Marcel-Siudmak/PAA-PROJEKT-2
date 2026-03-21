@@ -3,18 +3,12 @@
 #include <cstdint>
 #include <vector>
 
-/**
- * @brief Klasa Board - fundament silnika.
- * Wykorzystuje Little-Endian Rank-File Mapping (LERF):
- * bit 0  = a1, bit 7  = h1
- * bit 56 = a8, bit 63 = h8
- */
+#include "types.hpp"
+#include "move.hpp"
+
 
 class Board {
 public:
-    enum class Color { WHITE, BLACK };
-    enum class PieceType { PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING };
-
     // --- Dane Stanu Gry ---
     
     // Tablica bitboardów: [0=Białe, 1=Czarne][0-5=Typ figury]
@@ -56,12 +50,15 @@ public:
     uint64_t getPawnSinglePushes(Color color) const;
     uint64_t getPawnDoublePushes(Color color) const;
     uint64_t getPawnAttacks(Color color) const;
+    uint64_t getPawnAttacks(Color color, uint64_t pawnBitboard) const;
     uint64_t getKnightAttacks(uint64_t knights) const;
     uint64_t getKingAttacks(uint64_t king) const;
     uint64_t getTowerAttacks(int sq) const;
     uint64_t getBishopAttacks(int sq) const;
     uint64_t getQueenAttacks(int sq) const;
     bool isSquareAttacked(int sq, Color side) const;
+    std::vector<Move> generatePseudoLegalMoves(Color side) const;
+    PieceType getPieceAt(int sq, Color color) const;
 
 
 private:

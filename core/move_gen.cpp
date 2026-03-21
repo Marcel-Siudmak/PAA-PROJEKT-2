@@ -49,6 +49,18 @@ uint64_t Board::getPawnAttacks(Color color) const {
     }
 }
 
+uint64_t Board::getPawnAttacks(Color color, uint64_t pawnBitboard) const {
+    uint64_t attacks = 0ULL;
+    if (color == Color::WHITE) {
+        attacks |= (pawnBitboard << 7) & 0x7f7f7f7f7f7f7f7fULL;
+        attacks |= (pawnBitboard << 9) & 0xfefefefefefefefeULL;
+    } else {
+        attacks |= (pawnBitboard >> 7) & 0xfefefefefefefefeULL;
+        attacks |= (pawnBitboard >> 9) & 0x7f7f7f7f7f7f7f7fULL;
+    }
+    return attacks;
+}
+
 uint64_t Board::getKnightAttacks(uint64_t knights) const {
     // Ruchy skoczka: 8 możliwych kierunków
     uint64_t attacks = 0ULL;
@@ -137,4 +149,121 @@ bool Board::isSquareAttacked(int sq, Color side) const {
     }
 
     return false;
+}
+
+
+
+PieceType Board::getPieceAt(int sq, Color color) const {
+    uint64_t bit = (1ULL << sq);
+    for (int p = 0; p < 6; p++) {
+        if (pieces[static_cast<int>(color)][p] & bit) {
+            return static_cast<PieceType>(p);
+        }
+    }
+    return PieceType::NONE;
+}
+
+
+
+
+std::vector<Move> Board::generatePseudoLegalMoves(Color side) const {
+    std::vector<Move> moves;
+    uint64_t myPieces = getColorOccupied(side);
+    uint64_t opponentPieces = getColorOccupied(side == Color::WHITE ? Color::BLACK : Color::WHITE);
+    uint64_t allPieces = myPieces | opponentPieces;
+
+    // --- GENEROWANIE RUCHÓW SKOCZKÓW ---
+    uint64_t knights = pieces[static_cast<int>(side)][static_cast<int>(PieceType::KNIGHT)];
+    
+    while (knights) {
+        int fromSq = __builtin_ctzll(knights); // Znajdź pozycję skoczka
+        uint64_t knightAttacks = getKnightAttacks(1ULL << fromSq);
+        
+        // Możemy iść tylko tam, gdzie nie ma naszych figur
+        uint64_t validDestinations = knightAttacks & ~myPieces;
+
+        while (validDestinations) {
+            int toSq = __builtin_ctzll(validDestinations);
+            
+            // Sprawdź czy to bicie czy zwykły ruch
+            int capturedPiece = 0; // Tu docelowo funkcja sprawdzająca co stoi na toSq
+            
+            moves.emplace_back(fromSq, toSq, PieceType::KNIGHT, static_cast<PieceType>(capturedPiece));
+            
+            validDestinations &= (validDestinations - 1); // Usuń rozpatrzony cel
+        }
+        knights &= (knights - 1); // Usuń rozpatrzonego skoczka
+    }
+
+
+    // --- FIGURY DALEKOBIEŻNE (Sliding Pieces) ---
+    PieceType sliders[] = { PieceType::BISHOP, PieceType::ROOK, PieceType::QUEEN };
+
+    for (PieceType type : sliders) {
+        uint64_t sliderBB = pieces[static_cast<int>(side)][static_cast<int>(type)];
+        while (sliderBB) {
+            int fromSq = __builtin_ctzll(sliderBB);
+            uint64_t attacks;
+
+            if (type == PieceType::ROOK) attacks = getTowerAttacks(fromSq);
+            else if (type == PieceType::BISHOP) attacks = getBishopAttacks(fromSq);
+            else attacks = getQueenAttacks(fromSq);
+
+            uint64_t validDestinations = attacks & ~myPieces;
+
+            while (validDestinations) {
+                int toSq = __builtin_ctzll(validDestinations);
+                PieceType captured = getPieceAt(toSq, oppositeColor(side));
+                moves.emplace_back(fromSq, toSq, type, captured);
+                validDestinations &= (validDestinations - 1);
+            }
+            sliderBB &= (sliderBB - 1);
+        }
+    }
+
+
+    // --- PIONKI ---
+    uint64_t pawns = pieces[static_cast<int>(side)][static_cast<int>(PieceType::PAWN)];
+    int direction = (side == Color::WHITE) ? 8 : -8;
+    int startRank = (side == Color::WHITE) ? 1 : 6;
+    int promotionRank = (side == Color::WHITE) ? 7 : 0;
+
+    while (pawns) {
+        int fromSq = __builtin_ctzll(pawns);
+        int toSq = fromSq + direction;
+
+        // 1. Ruch o jedno pole do przodu
+        if (!((1ULL << toSq) & allPieces)) {
+            if (toSq / 8 == promotionRank) {
+                // Promocja (dla uproszczenia tylko na Hetmana)
+                moves.emplace_back(fromSq, toSq, PieceType::PAWN, PieceType::NONE, PieceType::QUEEN);
+            } else {
+                moves.emplace_back(fromSq, toSq, PieceType::PAWN, PieceType::NONE);
+                
+                // 2. Ruch o dwa pola (tylko ze startowej linii)
+                int doublePushSq = fromSq + 2 * direction;
+                if (fromSq / 8 == startRank && !((1ULL << doublePushSq) & allPieces)) {
+                    moves.emplace_back(fromSq, doublePushSq, PieceType::PAWN, PieceType::NONE);
+                }
+            }
+        }
+
+        // 3. Bicia (skosy)
+        uint64_t pawnAttacks = getPawnAttacks(side, (1ULL << fromSq));
+        uint64_t captures = pawnAttacks & opponentPieces;
+        
+        while (captures) {
+            int capSq = __builtin_ctzll(captures);
+            PieceType capPiece = getPieceAt(capSq, oppositeColor(side));
+            if (capSq / 8 == promotionRank) {
+                moves.emplace_back(fromSq, capSq, PieceType::PAWN, capPiece, PieceType::QUEEN);
+            } else {
+                moves.emplace_back(fromSq, capSq, PieceType::PAWN, capPiece);
+            }
+            captures &= (captures - 1);
+        }
+
+        pawns &= (pawns - 1);
+    }
+    return moves;
 }
