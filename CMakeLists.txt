@@ -23,6 +23,11 @@ add_library(chess_core ${CORE_SOURCES})
 add_executable(magic_gen utils/magic_generator.cpp)
 target_link_libraries(magic_gen chess_core)
 
-# 4. (W przyszłości) Twój główny program lub most do Pythona
-# add_executable(chess_engine main.cpp)
-# target_link_libraries(chess_engine chess_core)
+# 4. główny program lub most do Pythona
+
+
+# Tworzymy główny program z pliku main.cpp
+add_executable(chess_app core/main.cpp)
+
+# Łączymy go z naszym silnikiem
+target_link_libraries(chess_app chess_core)

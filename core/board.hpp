@@ -58,7 +58,10 @@ public:
     uint64_t getPawnAttacks(Color color) const;
     uint64_t getKnightAttacks(uint64_t knights) const;
     uint64_t getKingAttacks(uint64_t king) const;
-    uint64_t getTowerVerticalAttacks(uint64_t rook, uint64_t occupied) const;
+    uint64_t getTowerAttacks(int sq) const;
+    uint64_t getBishopAttacks(int sq) const;
+    uint64_t getQueenAttacks(int sq) const;
+    bool isSquareAttacked(int sq, Color side) const;
 
 
 private:
