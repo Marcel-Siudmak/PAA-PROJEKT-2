@@ -127,9 +127,11 @@ int main() {
         if (input == "bot") {
           std::cout << "Bot mysli (glebokosc 6)..." << std::endl;
           engine::SearchResult res = engine::getBestMove(board, 6);
+          std::cout << "Przeszukano " << res.nodes << " wezlow w czasie " 
+                    << res.timeSeconds << " s (" << (uint64_t)(res.nodes / (res.timeSeconds > 0 ? res.timeSeconds : 1)) << " NPS)\n";
           std::cout << "Bot ("
                     << (board.sideToMove == Color::WHITE ? "Biale" : "Czarne")
-                    << ") gra: " << moveToString(res.bestMove) << "\n";
+                    << ") gra: " << moveToString(res.bestMove) << " (eval: " << res.score << ")\n";
           board.makeMove(res.bestMove, board.sideToMove);
           validMove = true;
           break;
@@ -156,6 +158,8 @@ int main() {
       std::cout << "Bot mysli (glebokosc 6)..." << std::endl;
       engine::SearchResult res =
           engine::getBestMove(board, 6); // alpha-beta pozwala na glebsze szukanie
+      std::cout << "Przeszukano " << res.nodes << " wezlow w czasie " 
+                << res.timeSeconds << " s (" << (uint64_t)(res.nodes / (res.timeSeconds > 0 ? res.timeSeconds : 1)) << " NPS)\n";
       std::cout << "Bot zagra: " << moveToString(res.bestMove)
                 << " (eval: " << res.score << ")\n";
       board.makeMove(res.bestMove, board.sideToMove);

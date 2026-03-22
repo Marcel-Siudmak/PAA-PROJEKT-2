@@ -1,11 +1,16 @@
 #include "search.hpp"
 #include "evaluate.hpp"
 #include "types.hpp"
+#include <algorithm>
 #include <vector>
+#include <chrono>
 
 namespace engine {
 
+uint64_t nodesCounter = 0;
+
 int minimax(Board &board, int depth, int alpha, int beta) {
+  nodesCounter++;
   std::vector<Move> moves = board.generateLegalMoves();
 
   if (moves.empty()) {
@@ -26,6 +31,12 @@ int minimax(Board &board, int depth, int alpha, int beta) {
   if (depth == 0) {
     return evaluate(board);
   }
+
+  // Wstępne sortowanie ruchów: bicia na początek! (Move Ordering)
+  // Drastycznie zwiększa to szanse na szybkie odcięcie Alfa-Beta.
+  std::sort(moves.begin(), moves.end(), [](const Move &a, const Move &b) {
+      return (a.captured != PieceType::NONE) > (b.captured != PieceType::NONE);
+  });
 
   int maxScore = -1000000;
 
@@ -53,10 +64,19 @@ int minimax(Board &board, int depth, int alpha, int beta) {
 }
 
 SearchResult getBestMove(Board &board, int depth) {
+  auto start = std::chrono::high_resolution_clock::now();
+  nodesCounter = 1; // Liczymy pierwszy (root) wezel
+  
   std::vector<Move> moves = board.generateLegalMoves();
   if (moves.empty()) {
-    return {Move(0, 0, PieceType::NONE), 0};
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> diff = end - start;
+    return {Move(0, 0, PieceType::NONE), 0, nodesCounter, diff.count()};
   }
+
+  std::sort(moves.begin(), moves.end(), [](const Move &a, const Move &b) {
+      return (a.captured != PieceType::NONE) > (b.captured != PieceType::NONE);
+  });
 
   int alpha = -1000000;
   int beta = 1000000;
@@ -78,7 +98,10 @@ SearchResult getBestMove(Board &board, int depth) {
     }
   }
 
-  return {bestMove, bestScore};
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> diff = end - start;
+
+  return {bestMove, bestScore, nodesCounter, diff.count()};
 }
 
 } // namespace engine
