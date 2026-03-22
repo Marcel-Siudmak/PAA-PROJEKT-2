@@ -28,6 +28,8 @@ target_link_libraries(magic_gen chess_core)
 
 # Tworzymy główny program z pliku main.cpp
 add_executable(chess_app core/main.cpp)
-
-# Łączymy go z naszym silnikiem
 target_link_libraries(chess_app chess_core)
+
+# Dodany test Perft
+add_executable(perft_test core/perft.cpp)
+target_link_libraries(perft_test chess_core)

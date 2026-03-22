@@ -136,17 +136,8 @@ bool Board::isSquareAttacked(int sq, Color side) const {
     // 4. Gońce i Hetmany
     if (getBishopAttacks(sq) & (pieces[static_cast<int>(side)][static_cast<int>(PieceType::BISHOP)] | pieces[static_cast<int>(side)][static_cast<int>(PieceType::QUEEN)])) return true;
 
-    // 5. Pionki (używamy Twoich stałych FILE_A i FILE_H z magic.cpp)
-    uint64_t pawns = pieces[static_cast<int>(side)][static_cast<int>(PieceType::PAWN)];
-    if (side == Color::WHITE) {
-        // Ataki białych pionków idą "do góry" (z perspektywy sq, patrzymy kto bije z dołu)
-        if (((1ULL << sq) >> 7 & 0x7f7f7f7f7f7f7f7fULL & pawns) || 
-            ((1ULL << sq) >> 9 & 0xfefefefefefefefeULL & pawns)) return true;
-    } else {
-        // Ataki czarnych pionków (patrzymy kto bije z góry)
-        if (((1ULL << sq) << 7 & 0xfefefefefefefefeULL & pawns) || 
-            ((1ULL << sq) << 9 & 0x7f7f7f7f7f7f7f7fULL & pawns)) return true;
-    }
+    // 5. Pionki
+    if (getPawnAttacks(oppositeColor(side), 1ULL << sq) & pieces[static_cast<int>(side)][static_cast<int>(PieceType::PAWN)]) return true;
 
     return false;
 }
@@ -169,51 +160,40 @@ PieceType Board::getPieceAt(int sq, Color color) const {
 std::vector<Move> Board::generatePseudoLegalMoves(Color side) const {
     std::vector<Move> moves;
     uint64_t myPieces = getColorOccupied(side);
-    uint64_t opponentPieces = getColorOccupied(side == Color::WHITE ? Color::BLACK : Color::WHITE);
+    Color oppColor = oppositeColor(side);
+    uint64_t opponentPieces = getColorOccupied(oppColor);
     uint64_t allPieces = myPieces | opponentPieces;
 
     // --- GENEROWANIE RUCHÓW SKOCZKÓW ---
     uint64_t knights = pieces[static_cast<int>(side)][static_cast<int>(PieceType::KNIGHT)];
-    
     while (knights) {
-        int fromSq = __builtin_ctzll(knights); // Znajdź pozycję skoczka
-        uint64_t knightAttacks = getKnightAttacks(1ULL << fromSq);
-        
-        // Możemy iść tylko tam, gdzie nie ma naszych figur
-        uint64_t validDestinations = knightAttacks & ~myPieces;
+        int fromSq = __builtin_ctzll(knights);
+        uint64_t validDestinations = getKnightAttacks(1ULL << fromSq) & ~myPieces;
 
         while (validDestinations) {
             int toSq = __builtin_ctzll(validDestinations);
-            
-            // Sprawdź czy to bicie czy zwykły ruch
-            int capturedPiece = 0; // Tu docelowo funkcja sprawdzająca co stoi na toSq
-            
-            moves.emplace_back(fromSq, toSq, PieceType::KNIGHT, static_cast<PieceType>(capturedPiece));
-            
-            validDestinations &= (validDestinations - 1); // Usuń rozpatrzony cel
+            PieceType captured = getPieceAt(toSq, oppColor);
+            moves.emplace_back(fromSq, toSq, PieceType::KNIGHT, captured);
+            validDestinations &= (validDestinations - 1);
         }
-        knights &= (knights - 1); // Usuń rozpatrzonego skoczka
+        knights &= (knights - 1);
     }
-
 
     // --- FIGURY DALEKOBIEŻNE (Sliding Pieces) ---
     PieceType sliders[] = { PieceType::BISHOP, PieceType::ROOK, PieceType::QUEEN };
-
     for (PieceType type : sliders) {
         uint64_t sliderBB = pieces[static_cast<int>(side)][static_cast<int>(type)];
         while (sliderBB) {
             int fromSq = __builtin_ctzll(sliderBB);
             uint64_t attacks;
-
             if (type == PieceType::ROOK) attacks = getTowerAttacks(fromSq);
             else if (type == PieceType::BISHOP) attacks = getBishopAttacks(fromSq);
             else attacks = getQueenAttacks(fromSq);
 
             uint64_t validDestinations = attacks & ~myPieces;
-
             while (validDestinations) {
                 int toSq = __builtin_ctzll(validDestinations);
-                PieceType captured = getPieceAt(toSq, oppositeColor(side));
+                PieceType captured = getPieceAt(toSq, oppColor);
                 moves.emplace_back(fromSq, toSq, type, captured);
                 validDestinations &= (validDestinations - 1);
             }
@@ -221,6 +201,46 @@ std::vector<Move> Board::generatePseudoLegalMoves(Color side) const {
         }
     }
 
+    // --- GENEROWANIE RUCHÓW KRÓLA + ROSZADA ---
+    uint64_t king = pieces[static_cast<int>(side)][static_cast<int>(PieceType::KING)];
+    if (king) {
+        int fromSq = __builtin_ctzll(king);
+        uint64_t validDestinations = getKingAttacks(1ULL << fromSq) & ~myPieces;
+
+        while (validDestinations) {
+            int toSq = __builtin_ctzll(validDestinations);
+            PieceType captured = getPieceAt(toSq, oppColor);
+            moves.emplace_back(fromSq, toSq, PieceType::KING, captured);
+            validDestinations &= (validDestinations - 1);
+        }
+
+        // --- ROSZADY ---
+        // Warunki: Prawa do roszady, brak figur pomiędzy, król nie jest w szachu (sprawdzane w LegalMoves)
+        if (side == Color::WHITE) {
+            // Krótka (WK) - bit 0 (wartość 1)
+            if ((castlingRights & 1) && !((1ULL << 5) & allPieces) && !((1ULL << 6) & allPieces)) {
+                // Sprawdzamy czy pola f1, g1 nie są atakowane
+                if (!isSquareAttacked(4, Color::BLACK) && !isSquareAttacked(5, Color::BLACK) && !isSquareAttacked(6, Color::BLACK))
+                    moves.emplace_back(4, 6, PieceType::KING, PieceType::NONE, PieceType::NONE, CASTLING); 
+            }
+            // Długa (WQ) - bit 1 (wartość 2)
+            if ((castlingRights & 2) && !((1ULL << 1) & allPieces) && !((1ULL << 2) & allPieces) && !((1ULL << 3) & allPieces)) {
+                if (!isSquareAttacked(4, Color::BLACK) && !isSquareAttacked(3, Color::BLACK) && !isSquareAttacked(2, Color::BLACK))
+                    moves.emplace_back(4, 2, PieceType::KING, PieceType::NONE, PieceType::NONE, CASTLING);
+            }
+        } else {
+            // Czarna Krótka (BK) - bit 2 (wartość 4)
+            if ((castlingRights & 4) && !((1ULL << 61) & allPieces) && !((1ULL << 62) & allPieces)) {
+                if (!isSquareAttacked(60, Color::WHITE) && !isSquareAttacked(61, Color::WHITE) && !isSquareAttacked(62, Color::WHITE))
+                    moves.emplace_back(60, 62, PieceType::KING, PieceType::NONE, PieceType::NONE, CASTLING);
+            }
+            // Czarna Długa (BQ) - bit 3 (wartość 8)
+            if ((castlingRights & 8) && !((1ULL << 57) & allPieces) && !((1ULL << 58) & allPieces) && !((1ULL << 59) & allPieces)) {
+                if (!isSquareAttacked(60, Color::WHITE) && !isSquareAttacked(59, Color::WHITE) && !isSquareAttacked(58, Color::WHITE))
+                    moves.emplace_back(60, 58, PieceType::KING, PieceType::NONE, PieceType::NONE, CASTLING);
+            }
+        }
+    }
 
     // --- PIONKI ---
     uint64_t pawns = pieces[static_cast<int>(side)][static_cast<int>(PieceType::PAWN)];
@@ -235,12 +255,13 @@ std::vector<Move> Board::generatePseudoLegalMoves(Color side) const {
         // 1. Ruch o jedno pole do przodu
         if (!((1ULL << toSq) & allPieces)) {
             if (toSq / 8 == promotionRank) {
-                // Promocja (dla uproszczenia tylko na Hetmana)
-                moves.emplace_back(fromSq, toSq, PieceType::PAWN, PieceType::NONE, PieceType::QUEEN);
+                moves.emplace_back(fromSq, toSq, PieceType::PAWN, PieceType::NONE, PieceType::QUEEN, PROMOTION);
+                moves.emplace_back(fromSq, toSq, PieceType::PAWN, PieceType::NONE, PieceType::ROOK, PROMOTION);
+                moves.emplace_back(fromSq, toSq, PieceType::PAWN, PieceType::NONE, PieceType::BISHOP, PROMOTION);
+                moves.emplace_back(fromSq, toSq, PieceType::PAWN, PieceType::NONE, PieceType::KNIGHT, PROMOTION);
             } else {
                 moves.emplace_back(fromSq, toSq, PieceType::PAWN, PieceType::NONE);
-                
-                // 2. Ruch o dwa pola (tylko ze startowej linii)
+                // 2. Ruch o dwa pola
                 int doublePushSq = fromSq + 2 * direction;
                 if (fromSq / 8 == startRank && !((1ULL << doublePushSq) & allPieces)) {
                     moves.emplace_back(fromSq, doublePushSq, PieceType::PAWN, PieceType::NONE);
@@ -248,22 +269,73 @@ std::vector<Move> Board::generatePseudoLegalMoves(Color side) const {
             }
         }
 
-        // 3. Bicia (skosy)
+        // 3. Bicia standardowe
         uint64_t pawnAttacks = getPawnAttacks(side, (1ULL << fromSq));
         uint64_t captures = pawnAttacks & opponentPieces;
-        
         while (captures) {
             int capSq = __builtin_ctzll(captures);
-            PieceType capPiece = getPieceAt(capSq, oppositeColor(side));
+            PieceType capPiece = getPieceAt(capSq, oppColor);
             if (capSq / 8 == promotionRank) {
-                moves.emplace_back(fromSq, capSq, PieceType::PAWN, capPiece, PieceType::QUEEN);
+                moves.emplace_back(fromSq, capSq, PieceType::PAWN, capPiece, PieceType::QUEEN, PROMOTION);
+                moves.emplace_back(fromSq, capSq, PieceType::PAWN, capPiece, PieceType::ROOK, PROMOTION);
+                moves.emplace_back(fromSq, capSq, PieceType::PAWN, capPiece, PieceType::BISHOP, PROMOTION);
+                moves.emplace_back(fromSq, capSq, PieceType::PAWN, capPiece, PieceType::KNIGHT, PROMOTION);
             } else {
                 moves.emplace_back(fromSq, capSq, PieceType::PAWN, capPiece);
             }
             captures &= (captures - 1);
         }
 
+        // 4. Bicie w przelocie (En Passant)
+        uint64_t epCapture = pawnAttacks & enPassantSquare;
+        if (epCapture) {
+            int epSq = __builtin_ctzll(epCapture);
+            // Uwaga: w EP bijemy pionka, mimo że docelowe pole jest puste!
+            moves.emplace_back(fromSq, epSq, PieceType::PAWN, PieceType::PAWN, PieceType::NONE, EN_PASSANT);
+        }
+
         pawns &= (pawns - 1);
     }
     return moves;
+}
+
+
+
+std::vector<Move> Board::generateLegalMoves(Color side) {
+    std::vector<Move> pseudoMoves = generatePseudoLegalMoves(side);
+    std::vector<Move> legalMoves;
+
+    for (const auto& m : pseudoMoves) {
+        makeMove(m, side);
+        
+        // Znajdź gdzie jest król po ruchu
+        int kingSq = __builtin_ctzll(pieces[static_cast<int>(side)][static_cast<int>(PieceType::KING)]);
+        
+        // Jeśli pole króla nie jest atakowane przez przeciwnika - ruch jest legalny!
+        if (!isSquareAttacked(kingSq, oppositeColor(side))) {
+            legalMoves.push_back(m);
+        }
+
+        unmakeMove(m, side);
+    }
+    return legalMoves;
+}
+
+
+std::vector<Move> Board::generateLegalMoves() {
+    Color side = sideToMove;
+    std::vector<Move> pseudoMoves = generatePseudoLegalMoves(side);
+    std::vector<Move> legalMoves;
+
+    for (const auto& m : pseudoMoves) {
+        makeMove(m, side);
+        
+        int kingSq = __builtin_ctzll(pieces[static_cast<int>(side)][static_cast<int>(PieceType::KING)]);
+        if (!isSquareAttacked(kingSq, oppositeColor(side))) {
+            legalMoves.push_back(m);
+        }
+
+        unmakeMove(m, side);
+    }
+    return legalMoves;
 }

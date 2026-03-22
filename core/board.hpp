@@ -7,10 +7,18 @@
 #include "move.hpp"
 
 
+struct GameState {
+    uint8_t castlingRights;
+    uint64_t enPassantSquare;
+    // Tu w przyszłości dodasz: halfMoveClock (do zasady 50 ruchów) 
+    // oraz hash klucza Zobrista (do wykrywania powtórzeń).
+};
+
 class Board {
 public:
     // --- Dane Stanu Gry ---
-    
+    std::vector<GameState> history;
+
     // Tablica bitboardów: [0=Białe, 1=Czarne][0-5=Typ figury]
     uint64_t pieces[2][6];
     
@@ -60,6 +68,18 @@ public:
     std::vector<Move> generatePseudoLegalMoves(Color side) const;
     PieceType getPieceAt(int sq, Color color) const;
 
+    bool isInCheck(Color side) const;
+    GameStatus getGameStatus();
+
+
+    std::vector<Move> generateLegalMoves(Color side);
+    std::vector<Move> generateLegalMoves();
+
+
+
+    void makeMove(const Move& m, Color side);
+    void unmakeMove(const Move& m, Color side);
+    uint64_t perft(int depth);
 
 private:
     // Inicjalizacja pozycji startowej
