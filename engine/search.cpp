@@ -5,7 +5,7 @@
 
 namespace engine {
 
-int minimax(Board &board, int depth) {
+int minimax(Board &board, int depth, int alpha, int beta) {
   std::vector<Move> moves = board.generateLegalMoves();
 
   if (moves.empty()) {
@@ -33,13 +33,19 @@ int minimax(Board &board, int depth) {
     Color side_making_move = board.sideToMove;
     board.makeMove(move, side_making_move);
 
-    // Wywołanie NegaMax - negujemy wynik
-    int score = -minimax(board, depth - 1);
+    // Wywołanie NegaMax z Alpha-Beta
+    int score = -minimax(board, depth - 1, -beta, -alpha);
 
     board.unmakeMove(move, side_making_move);
 
     if (score > maxScore) {
       maxScore = score;
+    }
+    if (maxScore > alpha) {
+      alpha = maxScore;
+    }
+    if (alpha >= beta) {
+      break; // Odcięcie (Pruning)
     }
   }
 
@@ -52,18 +58,23 @@ SearchResult getBestMove(Board &board, int depth) {
     return {Move(0, 0, PieceType::NONE), 0};
   }
 
+  int alpha = -1000000;
+  int beta = 1000000;
   int bestScore = -1000000;
   Move bestMove = moves[0];
 
   for (const Move &move : moves) {
     Color side_making_move = board.sideToMove;
     board.makeMove(move, side_making_move);
-    int score = -minimax(board, depth - 1);
+    int score = -minimax(board, depth - 1, -beta, -alpha);
     board.unmakeMove(move, side_making_move);
 
     if (score > bestScore) {
       bestScore = score;
       bestMove = move;
+    }
+    if (bestScore > alpha) {
+      alpha = bestScore;
     }
   }
 

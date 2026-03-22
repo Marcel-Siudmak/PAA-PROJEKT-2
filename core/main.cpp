@@ -125,8 +125,8 @@ int main() {
         }
 
         if (input == "bot") {
-          std::cout << "Bot mysli..." << std::endl;
-          engine::SearchResult res = engine::getBestMove(board, 4);
+          std::cout << "Bot mysli (glebokosc 6)..." << std::endl;
+          engine::SearchResult res = engine::getBestMove(board, 6);
           std::cout << "Bot ("
                     << (board.sideToMove == Color::WHITE ? "Biale" : "Czarne")
                     << ") gra: " << moveToString(res.bestMove) << "\n";
@@ -153,9 +153,9 @@ int main() {
       }
     } else {
       // Ruch Bota (Czarne)
-      std::cout << "Bot mysli (glebokosc 4)..." << std::endl;
+      std::cout << "Bot mysli (glebokosc 6)..." << std::endl;
       engine::SearchResult res =
-          engine::getBestMove(board, 4); // bez alpha-beta 4 jest optymalne
+          engine::getBestMove(board, 6); // alpha-beta pozwala na glebsze szukanie
       std::cout << "Bot zagra: " << moveToString(res.bestMove)
                 << " (eval: " << res.score << ")\n";
       board.makeMove(res.bestMove, board.sideToMove);
