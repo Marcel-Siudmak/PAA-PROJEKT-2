@@ -56,14 +56,18 @@ bool Board::isInsufficientMaterial() const {
     if (wMinor == 0 && bMinor == 0) return true;
     if ((wMinor == 1 && bMinor == 0) || (wMinor == 0 && bMinor == 1)) return true;
     
+    if (wn == 0 && bn == 0 && wb == 1 && bb == 1) {
+        int wsq = __builtin_ctzll(pieces[static_cast<int>(Color::WHITE)][static_cast<int>(PieceType::BISHOP)]);
+        int bsq = __builtin_ctzll(pieces[static_cast<int>(Color::BLACK)][static_cast<int>(PieceType::BISHOP)]);
+        int wcol = (wsq / 8 + wsq % 8) % 2;
+        int bcol = (bsq / 8 + bsq % 8) % 2;
+        if (wcol == bcol) return true;
+    }
+    
     return false;
 }
 
 GameStatus Board::getGameStatus() {
-    if (halfMoveClock >= 100) return GameStatus::DRAW_FIFTY_MOVES;
-    if (isRepetition()) return GameStatus::DRAW_REPETITION;
-    if (isInsufficientMaterial()) return GameStatus::DRAW_INSUFFICIENT_MATERIAL;
-
     auto legalMoves = generateLegalMoves(); 
 
     if (legalMoves.empty()) {
@@ -73,6 +77,10 @@ GameStatus Board::getGameStatus() {
             return GameStatus::STALEMATE;
         }
     }
+
+    if (isInsufficientMaterial()) return GameStatus::DRAW_INSUFFICIENT_MATERIAL;
+    if (halfMoveClock >= 100) return GameStatus::DRAW_FIFTY_MOVES;
+    if (isRepetition()) return GameStatus::DRAW_REPETITION;
 
     return GameStatus::RUNNING;
 }

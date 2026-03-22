@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(ChessProject)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Ustawienie standardu C++
 set(CMAKE_CXX_STANDARD 17)
