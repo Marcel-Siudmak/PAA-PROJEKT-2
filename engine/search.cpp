@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <vector>
 #include <chrono>
+#include <cstdlib>
 
 namespace engine {
 
@@ -92,6 +93,11 @@ SearchResult getBestMove(Board &board, int depth) {
     if (score > bestScore) {
       bestScore = score;
       bestMove = move;
+    } else if (score == bestScore) {
+      // Tie-breaker: prosta losowość przy tych samych ocenach
+      if (rand() % 2 == 0) {
+        bestMove = move;
+      }
     }
     if (bestScore > alpha) {
       alpha = bestScore;
