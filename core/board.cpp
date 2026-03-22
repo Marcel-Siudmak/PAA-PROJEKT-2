@@ -1,9 +1,70 @@
 #include "board.hpp"
+#include "zobrist.hpp"
 
+uint64_t Board::calculateZobristHash() const {
+    uint64_t h = 0ULL;
+    for (int c = 0; c < 2; c++) {
+        for (int p = 0; p < 6; p++) {
+            uint64_t bb = pieces[c][p];
+            while (bb) {
+                int sq = __builtin_ctzll(bb);
+                h ^= ZOBRIST_PIECES[c][p][sq];
+                bb &= (bb - 1);
+            }
+        }
+    }
+    h ^= ZOBRIST_CASTLING[castlingRights];
+    if (enPassantSquare) {
+        h ^= ZOBRIST_EP[__builtin_ctzll(enPassantSquare)];
+    }
+    if (sideToMove == Color::BLACK) {
+        h ^= ZOBRIST_SIDE;
+    }
+    return h;
+}
 
+bool Board::isRepetition() const {
+    int count = 1;
+    int limit = std::min((int)history.size(), (int)halfMoveClock);
+    for (int i = 0; i < limit; i++) {
+        if (history[history.size() - 1 - i].zobristHash == zobristHash) {
+            count++;
+            if (count >= 3) return true;
+        }
+    }
+    return false;
+}
+
+bool Board::isInsufficientMaterial() const {
+    int wp = __builtin_popcountll(pieces[static_cast<int>(Color::WHITE)][static_cast<int>(PieceType::PAWN)]);
+    int bp = __builtin_popcountll(pieces[static_cast<int>(Color::BLACK)][static_cast<int>(PieceType::PAWN)]);
+    int wr = __builtin_popcountll(pieces[static_cast<int>(Color::WHITE)][static_cast<int>(PieceType::ROOK)]);
+    int br = __builtin_popcountll(pieces[static_cast<int>(Color::BLACK)][static_cast<int>(PieceType::ROOK)]);
+    int wq = __builtin_popcountll(pieces[static_cast<int>(Color::WHITE)][static_cast<int>(PieceType::QUEEN)]);
+    int bq = __builtin_popcountll(pieces[static_cast<int>(Color::BLACK)][static_cast<int>(PieceType::QUEEN)]);
+    
+    if (wp > 0 || bp > 0 || wr > 0 || br > 0 || wq > 0 || bq > 0) return false;
+
+    int wb = __builtin_popcountll(pieces[static_cast<int>(Color::WHITE)][static_cast<int>(PieceType::BISHOP)]);
+    int bb = __builtin_popcountll(pieces[static_cast<int>(Color::BLACK)][static_cast<int>(PieceType::BISHOP)]);
+    int wn = __builtin_popcountll(pieces[static_cast<int>(Color::WHITE)][static_cast<int>(PieceType::KNIGHT)]);
+    int bn = __builtin_popcountll(pieces[static_cast<int>(Color::BLACK)][static_cast<int>(PieceType::KNIGHT)]);
+
+    int wMinor = wb + wn;
+    int bMinor = bb + bn;
+
+    if (wMinor == 0 && bMinor == 0) return true;
+    if ((wMinor == 1 && bMinor == 0) || (wMinor == 0 && bMinor == 1)) return true;
+    
+    return false;
+}
 
 GameStatus Board::getGameStatus() {
-    auto legalMoves = generateLegalMoves(); // To używa sideToMove
+    if (halfMoveClock >= 100) return GameStatus::DRAW_FIFTY_MOVES;
+    if (isRepetition()) return GameStatus::DRAW_REPETITION;
+    if (isInsufficientMaterial()) return GameStatus::DRAW_INSUFFICIENT_MATERIAL;
+
+    auto legalMoves = generateLegalMoves(); 
 
     if (legalMoves.empty()) {
         if (isInCheck(sideToMove)) {
@@ -53,9 +114,15 @@ static const uint8_t CASTLING_MASK[64] = {
 };
 
 void Board::makeMove(const Move& m, Color side) {
-    history.push_back({castlingRights, enPassantSquare});
+    history.push_back({castlingRights, enPassantSquare, halfMoveClock, zobristHash});
     Color opp = oppositeColor(side);
     
+    if (m.piece == PieceType::PAWN || m.captured != PieceType::NONE) {
+        halfMoveClock = 0;
+    } else {
+        halfMoveClock++;
+    }
+
     // Resetuj EP, chyba że to skok pionka o 2
     enPassantSquare = 0ULL;
 
@@ -87,6 +154,7 @@ void Board::makeMove(const Move& m, Color side) {
     castlingRights &= CASTLING_MASK[m.from] & CASTLING_MASK[m.to];
 
     sideToMove = opp;
+    zobristHash = calculateZobristHash();
 }
 
 void Board::unmakeMove(const Move& m, Color side) {
@@ -95,6 +163,8 @@ void Board::unmakeMove(const Move& m, Color side) {
     // Przywróć stan
     castlingRights = history.back().castlingRights;
     enPassantSquare = history.back().enPassantSquare;
+    halfMoveClock = history.back().halfMoveClock;
+    zobristHash = history.back().zobristHash;
     history.pop_back();
     sideToMove = side;
 

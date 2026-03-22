@@ -2,6 +2,7 @@
 #include <chrono>
 #include "board.hpp"
 #include "magic.hpp"
+#include "zobrist.hpp"
 
 // Setup standard starting position
 void setupStartPosition(Board& b) {
@@ -28,6 +29,7 @@ void setupStartPosition(Board& b) {
 
 int main() {
     init_magic_tables();
+    init_zobrist();
     Board board;
     setupStartPosition(board);
 

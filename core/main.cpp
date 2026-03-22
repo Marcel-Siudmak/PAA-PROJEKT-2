@@ -7,6 +7,7 @@
 #include "types.hpp"
 #include "move.hpp"
 #include "magic.hpp"
+#include "zobrist.hpp"
 
 // --- POMOCNICZE FUNKCJE WIZUALIZACJI ---
 
@@ -68,6 +69,7 @@ void setupStartPosition(Board& b) {
 int main() {
     srand(time(NULL));
     init_magic_tables();
+    init_zobrist();
 
     Board board;
     setupStartPosition(board);
@@ -78,16 +80,22 @@ int main() {
         printBoard(board);
 
         // Sprawdzamy stan gry na początku tury
-        auto legalMoves = board.generateLegalMoves();
+        GameStatus status = board.getGameStatus();
 
-        if (legalMoves.empty()) {
-            if (board.isInCheck(board.sideToMove)) {
+        if (status != GameStatus::RUNNING) {
+            if (status == GameStatus::CHECKMATE) {
                 std::cout << "\n==============================\n";
                 std::cout << "       SZACH-MAT!             \n";
                 std::cout << " Wygrywaja: " << (board.sideToMove == Color::WHITE ? "CZARNE" : "BIALE") << "\n";
                 std::cout << "==============================\n";
-            } else {
+            } else if (status == GameStatus::STALEMATE) {
                 std::cout << "\n--- PAT (REMIS) ---\n";
+            } else if (status == GameStatus::DRAW_FIFTY_MOVES) {
+                std::cout << "\n--- REMIS (Zasada 50 ruchow) ---\n";
+            } else if (status == GameStatus::DRAW_REPETITION) {
+                std::cout << "\n--- REMIS (Trzykrotne powtorzenie pozycji) ---\n";
+            } else if (status == GameStatus::DRAW_INSUFFICIENT_MATERIAL) {
+                std::cout << "\n--- REMIS (Martwa pozycja - brak materialu) ---\n";
             }
             break; // Koniec pętli gry
         }
@@ -98,17 +106,6 @@ int main() {
 
         // 1. Generuj legalne ruchy
         std::vector<Move> moves = board.generateLegalMoves();
-
-        // 2. Sprawdź koniec gry
-        if (moves.empty()) {
-            int kingSq = __builtin_ctzll(board.pieces[static_cast<int>(board.sideToMove)][static_cast<int>(PieceType::KING)]);
-            if (board.isSquareAttacked(kingSq, oppositeColor(board.sideToMove))) {
-                std::cout << "--- SZACH MAT! Wygrywaja " << (board.sideToMove == Color::WHITE ? "Czarne" : "Biale") << " ---\n";
-            } else {
-                std::cout << "--- PAT! Remis ---\n";
-            }
-            break;
-        }
 
         std::cout << "Ruch nr " << moveCount + 1 << ". Mozliwych opcji: " << moves.size() << "\n";
         std::cout << "-> Nacisnij ENTER, aby wykonac losowy ruch...";

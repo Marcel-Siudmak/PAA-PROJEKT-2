@@ -13,6 +13,7 @@ set(CORE_SOURCES
     core/board.cpp
     core/move_gen.cpp
     core/magic.cpp
+    core/zobrist.cpp
 )
 
 # 2. Tworzymy bibliotekę z silnika (opcjonalne, ale ułatwia życie)

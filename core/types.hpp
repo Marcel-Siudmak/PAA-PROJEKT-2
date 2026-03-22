@@ -1,6 +1,13 @@
 #pragma once
 
-enum class GameStatus { RUNNING, CHECKMATE, STALEMATE };
+enum class GameStatus { 
+    RUNNING, 
+    CHECKMATE, 
+    STALEMATE,
+    DRAW_FIFTY_MOVES,
+    DRAW_REPETITION,
+    DRAW_INSUFFICIENT_MATERIAL 
+};
 enum class Color { WHITE, BLACK };
 enum class PieceType { PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NONE };
 enum MoveType { NORMAL, CASTLING, EN_PASSANT, PROMOTION };

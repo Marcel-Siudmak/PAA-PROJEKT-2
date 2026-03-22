@@ -6,12 +6,11 @@
 #include "types.hpp"
 #include "move.hpp"
 
-
 struct GameState {
     uint8_t castlingRights;
     uint64_t enPassantSquare;
-    // Tu w przyszłości dodasz: halfMoveClock (do zasady 50 ruchów) 
-    // oraz hash klucza Zobrista (do wykrywania powtórzeń).
+    uint8_t halfMoveClock;
+    uint64_t zobristHash;
 };
 
 class Board {
@@ -30,11 +29,16 @@ public:
     
     Color sideToMove;
 
+    uint8_t halfMoveClock;
+    uint64_t zobristHash;    
+
     // --- Konstruktor ---
     Board() : 
         castlingRights(0x0F), // Na początku wszyscy mają prawo do obu roszad
         enPassantSquare(0ULL),
-        sideToMove(Color::WHITE) 
+        sideToMove(Color::WHITE),
+        halfMoveClock(0),
+        zobristHash(0ULL)
     {
         // Inicjalizacja tablicy figur stałymi
         pieces[static_cast<int>(Color::WHITE)][static_cast<int>(PieceType::PAWN)]   = WHITE_PAWNS_INIT;
@@ -71,6 +75,9 @@ public:
     bool isInCheck(Color side) const;
     GameStatus getGameStatus();
 
+    bool isInsufficientMaterial() const;
+    bool isRepetition() const;
+    uint64_t calculateZobristHash() const;
 
     std::vector<Move> generateLegalMoves(Color side);
     std::vector<Move> generateLegalMoves();
