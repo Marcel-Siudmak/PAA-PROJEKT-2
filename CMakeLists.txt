@@ -2,9 +2,17 @@ cmake_minimum_required(VERSION 3.10)
 project(ChessProject)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Domyślnie buduj w trybie Release z pełną optymalizacją
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
 # Ustawienie standardu C++
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Flagi optymalizacji dla Release
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
 
 # Dodajemy folder core do ścieżek wyszukiwania nagłówków (#include "board.hpp" zadziała wszędzie)
 include_directories(core engine)
