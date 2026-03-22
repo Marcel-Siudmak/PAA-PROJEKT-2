@@ -1,6 +1,7 @@
 #include "search.hpp"
 #include "evaluate.hpp"
 #include "types.hpp"
+#include "tt.hpp"
 #include <algorithm>
 #include <vector>
 #include <chrono>
@@ -12,102 +13,135 @@ uint64_t nodesCounter = 0;
 
 int minimax(Board &board, int depth, int alpha, int beta) {
   nodesCounter++;
+
+  // 1. Sprawdzenie liścia (najszybsze)
+  if (depth <= 0) {
+    return evaluate(board);
+  }
+
+  // 2. Sprawdzenie TT
+  int ttScore;
+  Move ttMove(-1, -1, PieceType::NONE);
+  if (g_tt.probe(board.zobristHash, depth, alpha, beta, ttScore, &ttMove)) {
+    return ttScore;
+  }
+
+  // 3. Wykrywanie remisów (Repetition, Insufficient Material, 50-move rule)
+  if (board.halfMoveClock >= 100 || board.isRepetition() || board.isInsufficientMaterial()) {
+    return 0;
+  }
+
   std::vector<Move> moves = board.generateLegalMoves();
 
   if (moves.empty()) {
     if (board.isInCheck(board.sideToMove)) {
-      // Im szybciej mat, tym gorzej dla matowanego (więc zwracamy negatywną,
-      // bliską -MATE_SCORE ocenę z perspektywy matowanego).
-      // Dołączenie 'depth' preferuje szybsze maty.
       return -100000 - depth;
     }
     return 0; // Stalemate
   }
 
-  if (board.isInsufficientMaterial() || board.isRepetition() ||
-      board.halfMoveClock >= 100) {
-    return 0;
-  }
-
-  if (depth == 0) {
-    return evaluate(board);
-  }
-
-  // Wstępne sortowanie ruchów: bicia na początek! (Move Ordering)
-  // Drastycznie zwiększa to szanse na szybkie odcięcie Alfa-Beta.
-  std::sort(moves.begin(), moves.end(), [](const Move &a, const Move &b) {
+  // Wstępne sortowanie ruchów
+  std::sort(moves.begin(), moves.end(), [&](const Move &a, const Move &b) {
+      if (ttMove.from != -1) {
+          if (a.from == ttMove.from && a.to == ttMove.to) return true;
+          if (b.from == ttMove.from && b.to == ttMove.to) return false;
+      }
       return (a.captured != PieceType::NONE) > (b.captured != PieceType::NONE);
   });
 
   int maxScore = -1000000;
+  int originalAlpha = alpha;
+  const Move* bestMovePtr = nullptr;
 
   for (const Move &move : moves) {
     Color side_making_move = board.sideToMove;
     board.makeMove(move, side_making_move);
 
-    // Wywołanie NegaMax z Alpha-Beta
     int score = -minimax(board, depth - 1, -beta, -alpha);
 
     board.unmakeMove(move, side_making_move);
 
     if (score > maxScore) {
       maxScore = score;
+      bestMovePtr = &move;
     }
+    
     if (maxScore > alpha) {
       alpha = maxScore;
     }
     if (alpha >= beta) {
-      break; // Odcięcie (Pruning)
+      break; 
     }
   }
+
+  // Zapis do TT
+  TTFlag flag = TTFlag::EXACT;
+  if (maxScore <= originalAlpha) flag = TTFlag::UPPER_BOUND;
+  else if (maxScore >= beta) flag = TTFlag::LOWER_BOUND;
+  
+  g_tt.store(board.zobristHash, maxScore, depth, flag, bestMovePtr);
 
   return maxScore;
 }
 
 SearchResult getBestMove(Board &board, int depth) {
   auto start = std::chrono::high_resolution_clock::now();
-  nodesCounter = 1; // Liczymy pierwszy (root) wezel
+  nodesCounter = 0;
   
-  std::vector<Move> moves = board.generateLegalMoves();
-  if (moves.empty()) {
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> diff = end - start;
-    return {Move(0, 0, PieceType::NONE), 0, nodesCounter, diff.count()};
-  }
+  Move overallBestMove(0, 0, PieceType::NONE);
+  int overallBestScore = -1000000;
 
-  std::sort(moves.begin(), moves.end(), [](const Move &a, const Move &b) {
-      return (a.captured != PieceType::NONE) > (b.captured != PieceType::NONE);
-  });
+  // Iterative Deepening
+  for (int d = 1; d <= depth; d++) {
+    std::vector<Move> moves = board.generateLegalMoves();
+    if (moves.empty()) break;
 
-  int alpha = -1000000;
-  int beta = 1000000;
-  int bestScore = -1000000;
-  Move bestMove = moves[0];
+    // Pobierz PV move z TT dla lepszego sortowania na poziomie root
+    Move pvMove(-1, -1, PieceType::NONE);
+    int dummyScore;
+    g_tt.probe(board.zobristHash, d, -1000000, 1000000, dummyScore, &pvMove);
 
-  for (const Move &move : moves) {
-    Color side_making_move = board.sideToMove;
-    board.makeMove(move, side_making_move);
-    int score = -minimax(board, depth - 1, -beta, -alpha);
-    board.unmakeMove(move, side_making_move);
+    std::sort(moves.begin(), moves.end(), [&](const Move &a, const Move &b) {
+        if (pvMove.from != -1) {
+            if (a.from == pvMove.from && a.to == pvMove.to) return true;
+            if (b.from == pvMove.from && b.to == pvMove.to) return false;
+        }
+        return (a.captured != PieceType::NONE) > (b.captured != PieceType::NONE);
+    });
 
-    if (score > bestScore) {
-      bestScore = score;
-      bestMove = move;
-    } else if (score == bestScore) {
-      // Tie-breaker: prosta losowość przy tych samych ocenach
-      if (rand() % 2 == 0) {
+    int alpha = -1000000;
+    int beta = 1000000;
+    int bestScore = -1000000;
+    Move bestMove = moves[0];
+
+    for (const Move &move : moves) {
+      Color side_making_move = board.sideToMove;
+      board.makeMove(move, side_making_move);
+      int score = -minimax(board, d - 1, -beta, -alpha);
+      board.unmakeMove(move, side_making_move);
+
+      if (score > bestScore) {
+        bestScore = score;
         bestMove = move;
+      } else if (score == bestScore) {
+        if (rand() % 2 == 0) bestMove = move;
+      }
+      if (bestScore > alpha) {
+        alpha = bestScore;
       }
     }
-    if (bestScore > alpha) {
-      alpha = bestScore;
-    }
+    
+    overallBestMove = bestMove;
+    overallBestScore = bestScore;
+    
+    // Opcjonalnie: jeśli mamy już mata, możemy przerwać
+    if (overallBestScore > 90000 || overallBestScore < -90000) break;
   }
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> diff = end - start;
 
-  return {bestMove, bestScore, nodesCounter, diff.count()};
+  return {overallBestMove, overallBestScore, nodesCounter, diff.count()};
 }
 
 } // namespace engine

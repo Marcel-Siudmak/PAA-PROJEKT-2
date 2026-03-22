@@ -23,6 +23,7 @@ add_library(chess_core ${CORE_SOURCES})
 set(ENGINE_SOURCES
     engine/evaluate.cpp
     engine/search.cpp
+    engine/tt.cpp
 )
 add_library(chess_engine ${ENGINE_SOURCES})
 target_link_libraries(chess_engine chess_core)
