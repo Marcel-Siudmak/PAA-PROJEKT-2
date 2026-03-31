@@ -51,3 +51,9 @@ target_link_libraries(chess_app chess_core chess_engine)
 # Dodany test Perft
 add_executable(perft_test core/perft.cpp)
 target_link_libraries(perft_test chess_core)
+
+# GUI - prosty HTTP serwer szachowy do uruchomienia w przeglądarce
+add_executable(chess_gui gui/server.cpp)
+target_link_libraries(chess_gui chess_core chess_engine)
+find_package(Threads REQUIRED)
+target_link_libraries(chess_gui Threads::Threads)
