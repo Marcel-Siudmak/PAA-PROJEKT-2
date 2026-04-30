@@ -52,8 +52,10 @@ target_link_libraries(chess_app chess_core chess_engine)
 add_executable(perft_test core/perft.cpp)
 target_link_libraries(perft_test chess_core)
 
-# GUI - prosty HTTP serwer szachowy do uruchomienia w przeglądarce
-add_executable(chess_gui gui/server.cpp)
-target_link_libraries(chess_gui chess_core chess_engine)
-find_package(Threads REQUIRED)
-target_link_libraries(chess_gui Threads::Threads)
+# GUI - Desktop GUI z wxWidgets
+find_package(wxWidgets REQUIRED COMPONENTS core base)
+include(${wxWidgets_USE_FILE})
+
+add_executable(chess_gui gui/chess_gui.cpp)
+target_link_libraries(chess_gui chess_core chess_engine ${wxWidgets_LIBRARIES})
+target_include_directories(chess_gui PRIVATE ${wxWidgets_INCLUDE_DIRS})
