@@ -32,6 +32,7 @@ set(ENGINE_SOURCES
     engine/evaluate.cpp
     engine/search.cpp
     engine/tt.cpp
+    engine/nnue.cpp
 )
 add_library(chess_engine ${ENGINE_SOURCES})
 target_link_libraries(chess_engine chess_core)
@@ -51,6 +52,10 @@ target_link_libraries(chess_app chess_core chess_engine)
 # Dodany test Perft
 add_executable(perft_test core/perft.cpp)
 target_link_libraries(perft_test chess_core)
+
+# Self-play generator (do generowania danych treningowych NNUE)
+add_executable(selfplay_gen ml/selfplay_bridge.cpp)
+target_link_libraries(selfplay_gen chess_core chess_engine)
 
 # GUI - Desktop GUI z wxWidgets
 find_package(wxWidgets REQUIRED COMPONENTS core base)

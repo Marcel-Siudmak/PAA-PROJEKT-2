@@ -7,6 +7,7 @@
 
 // ── najpierw nagłówki silnika (bez wxWidgets) ───────────────────────────────
 #include "board.hpp"
+#include "evaluate.hpp"
 #include "move.hpp"
 #include "search.hpp"
 #include "types.hpp"
@@ -351,6 +352,12 @@ public:
     bool OnInit() override {
         init_magic_tables();
         init_zobrist();
+
+        // Próba załadowania wag NNUE z kilku lokalizacji
+        if (!engine::loadNNUE("nn.bin")) {
+            engine::loadNNUE("../nn.bin");
+        }
+
         (new ChessFrame())->Show();
         return true;
     }
